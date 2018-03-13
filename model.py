@@ -12,6 +12,34 @@ class Model():
             ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, lr=7e-4, alpha=0.99, epsilon=1e-5,
             total_timesteps=int(80e6), lrschedule='linear', option_eps=0.001, delib_cost=0.001):
 
+        '''
+
+        Parameters
+        ----------
+        model_template: define the model information
+        num_options: number of options
+        ob_space: observation
+        ac_space: action
+        nenvs:
+        nsteps
+        nstack
+        num_procs: number of parallelism threads
+        ent_coef: entropy loss coefficient
+        vf_coef: value loss coefficient
+        max_grad_norm
+        lr: rmsprop learning rate
+        alpha: rmsprop parameters
+        epsilon: rms parameters
+        total_timesteps:
+        lrschedule
+        option_eps
+        delib_cost
+
+        Returns
+        -------
+
+        '''
+
         config = tf.ConfigProto(allow_soft_placement=True,
             intra_op_parallelism_threads=num_procs,
             inter_op_parallelism_threads=num_procs)
@@ -29,7 +57,7 @@ class Model():
         self.option_eps = option_eps
         self.action_eps = epsilon
 
-        batch_indexer = tf.range(nbatch)
+        batch_indexer = tf.range(nbatch) # list from 0 to nbatch-1
 
         print("Building rest of the graph.")
 
@@ -78,7 +106,8 @@ class Model():
         action_probabilities = self.train_model.intra_option_policies
         self.entropy = ent_coef * tf.reduce_mean(action_probabilities * tf.log(action_probabilities))
 
-        self.loss = -self.policy_loss - self.entropy - self.value_loss - self.termination_loss
+        self.loss = -self.policy_loss - self.entropy - self.value_loss - self.termination_loss # the loss function along the
+        # model, check with the delibration cost paper
 
         # Gradients
         train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'model')

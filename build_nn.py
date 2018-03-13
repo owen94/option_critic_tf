@@ -4,6 +4,7 @@ import math, csv, time, sys, os, pdb, copy
 
 
 def get_activation(activation):
+    # different activation functions
     if activation == "softmax":
         output = tf.nn.softmax
     elif activation is None:
@@ -26,13 +27,14 @@ def get_activation(activation):
 
 
 class Network():
+    # define the network
     def __init__(self, model_in, nopt, ob_space, ac_space, nenvs, nsteps, nstack, reuse=False):
         with tf.variable_scope("model", reuse=reuse):
             self.nbatches = nenvs * nsteps
             self.nh, self.nw, self.nc = ob_space.shape
             self.ob_shape = (self.nbatches, self.nh, self.nw, self.nc*nstack)
             self.nact = ac_space.n
-            self.nopt = nopt
+            self.nopt = nopt  # the number of options, this is a hyper-parameter
             self.rng = np.random.RandomState(0) # TODO - what seed to send?
 
             self.observations = tf.placeholder(shape=self.ob_shape, dtype=tf.uint8)
@@ -73,6 +75,7 @@ class Network():
             self.termination_fn = self.create_layer(input_tensor, m, dnn_type=dnn_type, name='termination_fn')
             self.q_values_options = self.create_layer(input_tensor, m, dnn_type, name='q_values_options')
 
+            # create the intra_option policies for every option
             self.intra_option_policies = list()
             for i in range(self.nopt):
                 intra_option = self.create_layer(input_tensor, m, dnn_type=dnn_type, name='intra_option_{}'.format(i))
@@ -89,6 +92,18 @@ class Network():
 
 
     def create_layer(self, inputs, model, dnn_type=True, name=None):
+        '''
+        Parameters
+        ----------
+        inputs: the input tensor to the network, state representation for option network
+        model: a dictionary to index
+        dnn_type: use cuda or not
+        name: name of the network
+
+        Returns
+        -------
+
+        '''
         layer = None
         if model["model_type"] == "conv":
             poolsize = tuple(model["pool"]) if "pool" in model else (1,1)
@@ -125,6 +140,10 @@ class Network():
             )
 
         elif model["model_type"] == "option":
+            '''
+               three parts in options networks. one is for termination, one is for the q_value of each option,
+                the last one is for the intra-option learning.
+            '''
             if name == 'termination_fn':
                 layer = tf.layers.dense(
                     inputs=inputs,
@@ -134,6 +153,8 @@ class Network():
                 )
 
             elif name == 'q_values_options':
+
+
                 layer = tf.layers.dense(
                     inputs=inputs,
                     units=self.nopt,
@@ -157,6 +178,7 @@ class Network():
 
 
     def setup_tensorflow(self, sess, writer):
+        # setup the initializers and writer
         self.sess = sess
         self.writer = writer
 
@@ -165,16 +187,27 @@ class Network():
 
 
     def get_policy_over_options(self, observations):
+        # reuturn which option to choose in this function
         q_values_options, value = self.sess.run(self.q_values_options, self.value_fn, feed_dict={self.observations: observations})
         return q_values_options.argmax() if self.rng.rand() > self.args.option_eps else self.rng.randint(self.nopt), value
 
 
     def value(self, observations):
+        # return the value of a state
         value = self.sess.run(self.value_fn, feed_dict={self.observations: observations})
         return value
 
 
     def step(self, observations, current_options):
+        # compute the probability of each action inside some options,
+        # then select the action to take by sampling
+
+        # how to define the current_option ? need to check the code
+
+        '''
+            go back and check this again in the call method
+        '''
+
         option_action_probabilities, value = self.sess.run([
                 tf.nn.softmax(self.intra_option_policies, dim=2),
                 self.value_fn,
@@ -183,6 +216,9 @@ class Network():
         )
 
         act_to_take = []
+
+        # check the available options, and select an action accordingly
+
         for idx, option in enumerate(current_options):
             act_prob = option_action_probabilities[option][idx]
             act_to_take.append(self.rng.choice(range(self.nact), p=act_prob))
@@ -191,6 +227,7 @@ class Network():
 
 
     def update_options(self, observations, current_options, option_eps, delib_cost):
+        # does the option terminate or not? if terminate, choose another option
         costs = np.zeros(len(current_options))
 
         q_values_options, termination_prob = self.sess.run([

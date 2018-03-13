@@ -3,6 +3,8 @@ import os, copy
 
 from baselines.a2c.utils import discount_with_dones
 
+#  for sample actions, rewards. interacting with the environment
+
 class Runner(object):
     def __init__(self, env, model, nsteps=20, nstack=4, gamma=0.99, option_eps=0.001, delib_cost=0.020):
         self.env = env
